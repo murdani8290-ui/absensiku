@@ -1,111 +1,95 @@
-// AbsensiKu Service Worker
-// Dikembangkan oleh Murdani
+// AbsensiKu Service Worker v3
+// Versi ini memastikan installable sebagai app native Android
 
-const CACHE_NAME = 'absensi-ku-v1';
+const CACHE_NAME = 'absensiKu-v3';
 const STATIC_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap',
-  'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js'
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
-// Install event — cache static assets
+// Install — cache aset penting
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing...');
+  console.log('[SW] Install v3');
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Caching static assets');
-      return cache.addAll(STATIC_ASSETS.map(url => new Request(url, { mode: 'no-cors' })));
-    }).catch(err => {
-      console.log('[SW] Cache error (non-fatal):', err);
-    })
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(STATIC_ASSETS.map(url => new Request(url, {mode:'no-cors'}))))
+      .catch(err => console.warn('[SW] Cache partial fail:', err))
   );
+  // Langsung aktif tanpa nunggu tab lama ditutup
   self.skipWaiting();
 });
 
-// Activate event — clean old caches
+// Activate — bersihkan cache lama
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating...');
+  console.log('[SW] Activate v3');
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter(key => key !== CACHE_NAME)
-            .map(key => {
-              console.log('[SW] Deleting old cache:', key);
-              return caches.delete(key);
-            })
-      );
-    })
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    )
   );
+  // Ambil kendali semua tab langsung
   self.clients.claim();
 });
 
-// Fetch event — cache-first for static, network-first for API
+// Fetch — strategi cerdas per jenis request
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip Supabase API requests — always go to network
-  if (url.hostname.includes('supabase.co')) {
+  // Supabase API — selalu network
+  if(url.hostname.includes('supabase.co')) {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return new Response(JSON.stringify({ error: 'Tidak ada koneksi internet' }), {
+      fetch(event.request).catch(() =>
+        new Response('{"error":"offline"}', {
           status: 503,
-          headers: { 'Content-Type': 'application/json' }
-        });
+          headers: {'Content-Type':'application/json'}
+        })
+      )
+    );
+    return;
+  }
+
+  // CDN (React, fonts, dll) — cache-first
+  if(url.hostname.includes('cloudflare') || url.hostname.includes('googleapis') ||
+     url.hostname.includes('gstatic') || url.hostname.includes('jsdelivr')) {
+    event.respondWith(
+      caches.match(event.request).then(cached => {
+        if(cached) return cached;
+        return fetch(event.request).then(resp => {
+          if(resp && resp.ok) {
+            const clone = resp.clone();
+            caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+          }
+          return resp;
+        }).catch(() => new Response('', {status:408}));
       })
     );
     return;
   }
 
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') return;
+  // File lokal (index.html, manifest, icons) — network-first dengan fallback cache
+  if(event.request.method !== 'GET') return;
 
-  // Cache-first strategy for static assets
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cached, but also update in background
-        fetch(event.request).then(networkResponse => {
-          if (networkResponse && networkResponse.ok) {
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, networkResponse);
-            });
-          }
-        }).catch(() => {});
-        return cachedResponse;
+    fetch(event.request).then(resp => {
+      if(resp && resp.ok) {
+        const clone = resp.clone();
+        caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
       }
-
-      // Network fallback
-      return fetch(event.request).then(networkResponse => {
-        if (networkResponse && networkResponse.ok && event.request.url.startsWith('http')) {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseClone);
-          });
-        }
-        return networkResponse;
-      }).catch(() => {
-        // Offline fallback for HTML pages
-        if (event.request.headers.get('accept').includes('text/html')) {
-          return caches.match('./index.html');
-        }
-      });
-    })
+      return resp;
+    }).catch(() =>
+      caches.match(event.request).then(cached =>
+        cached || caches.match('./index.html')
+      )
+    )
   );
 });
 
-// Background sync (for future use)
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-attendance') {
-    console.log('[SW] Background sync: attendance');
-  }
-});
-
-// Push notification (for future use)
+// Push notification
 self.addEventListener('push', (event) => {
-  if (!event.data) return;
+  if(!event.data) return;
   const data = event.data.json();
   self.registration.showNotification(data.title || 'AbsensiKu', {
     body: data.body || 'Ada notifikasi baru',
@@ -118,7 +102,5 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(
-    clients.openWindow(event.notification.data.url || './')
-  );
+  event.waitUntil(clients.openWindow(event.notification.data.url || './'));
 });
