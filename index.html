@@ -214,10 +214,10 @@ const DB = {
   },
   async getRecords() {
     const {data} = await sb.from('attendance_records').order('date',{ascending:false}).order('created_at',{ascending:false}).get();
-    return (data||[]).map(r=>({id:r.id,studentId:r.student_id,studentName:r.student_name,studentCode:r.student_code,date:r.date,clockIn:r.clock_in?r.clock_in.slice(0,5):null,clockOut:r.clock_out?r.clock_out.slice(0,5):null,clockInPhoto:r.clock_in_photo,clockOutPhoto:r.clock_out_photo,clockInLocation:r.clock_in_location,clockOutLocation:r.clock_out_location,clockInDistance:r.clock_in_distance,clockOutDistance:r.clock_out_distance,deviceId:r.device_id}));
+    return (data||[]).map(r=>({id:r.id,studentId:r.student_id,studentName:r.student_name,studentCode:r.student_code,date:r.date,clockIn:r.clock_in?r.clock_in.slice(0,5):null,clockInStatus:r.clock_in_status||null,clockOut:r.clock_out?r.clock_out.slice(0,5):null,clockOutStatus:r.clock_out_status||null,clockInPhoto:r.clock_in_photo,clockOutPhoto:r.clock_out_photo,clockInLocation:r.clock_in_location,clockOutLocation:r.clock_out_location,clockInDistance:r.clock_in_distance,clockOutDistance:r.clock_out_distance,deviceId:r.device_id}));
   },
   async upsertRecord(rec) {
-    const row = {id:rec.id,student_id:rec.studentId,student_name:rec.studentName,student_code:rec.studentCode,date:rec.date,clock_in:rec.clockIn||null,clock_out:rec.clockOut||null,clock_in_photo:rec.clockInPhoto||null,clock_out_photo:rec.clockOutPhoto||null,clock_in_location:rec.clockInLocation||null,clock_out_location:rec.clockOutLocation||null,clock_in_distance:rec.clockInDistance!=null?rec.clockInDistance:null,clock_out_distance:rec.clockOutDistance!=null?rec.clockOutDistance:null,device_id:rec.deviceId||null};
+    const row = {id:rec.id,student_id:rec.studentId,student_name:rec.studentName,student_code:rec.studentCode,date:rec.date,clock_in:rec.clockIn||null,clock_in_status:rec.clockInStatus||null,clock_out:rec.clockOut||null,clock_out_status:rec.clockOutStatus||null,clock_in_photo:rec.clockInPhoto||null,clock_out_photo:rec.clockOutPhoto||null,clock_in_location:rec.clockInLocation||null,clock_out_location:rec.clockOutLocation||null,clock_in_distance:rec.clockInDistance!=null?rec.clockInDistance:null,clock_out_distance:rec.clockOutDistance!=null?rec.clockOutDistance:null,device_id:rec.deviceId||null};
     return sb.from('attendance_records').upsert(row);
   },
   async clearRecords() {
@@ -285,10 +285,10 @@ const DB = {
 };
 
 const exportCSV = (records, students, settings) => {
-  const hdr = ['Tanggal','Kode Siswa','Nama','Kelas','NIS','Jam Masuk','Status','Jam Pulang','Device ID','Jarak Masuk'];
+  const hdr = ['Tanggal','Kode Siswa','Nama','Kelas','NIS','Jam Masuk','Status Masuk','Jam Pulang','Status Pulang','Device ID','Jarak Masuk'];
   const rows = records.map(r => {
     const s = students.find(x=>x.id===r.studentId);
-    return [r.date,r.studentCode,r.studentName,s&&s.kelas||'-',s&&s.nis||'-',r.clockIn||'-',r.clockIn?(isLate(r.clockIn,settings.schoolStart)?'Terlambat':'Tepat Waktu'):'-',r.clockOut||'-',r.deviceId||'-',r.clockInDistance!=null?Math.round(r.clockInDistance)+'m':'-'].join(',');
+    const cosLabel=r.clockOutStatus==='lembur'?'Lembur':r.clockOutStatus==='cepat'?'Cepat Pulang':r.clockOut?'Tepat Waktu':'-';return [r.date,r.studentCode,r.studentName,s&&s.kelas||'-',s&&s.nis||'-',r.clockIn||'-',r.clockInStatus==='cepat'?'Cepat Datang':r.clockInStatus==='terlambat'?'Terlambat':r.clockIn?'Tepat Waktu':'-',r.clockOut||'-',cosLabel,r.deviceId||'-',r.clockInDistance!=null?Math.round(r.clockInDistance)+'m':'-'].join(',');
   });
   const blob = new Blob([[hdr.join(','),...rows].join('\n')],{type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='absensi_'+todayStr()+'.csv'; a.click();
@@ -1083,8 +1083,8 @@ function AdminAttendance({records,students,settings}) {
         r.clockIn&&h('span',{style:{fontSize:'9px',fontFamily:MONO,padding:'4px 8px',borderRadius:'999px',border:'1px solid',color:isLate(r.clockIn,settings.schoolStart)?'#fb923c':'#00ff88',background:isLate(r.clockIn,settings.schoolStart)?'rgba(251,146,60,.1)':'rgba(0,255,136,.1)',borderColor:isLate(r.clockIn,settings.schoolStart)?'rgba(251,146,60,.2)':'rgba(0,255,136,.2)'}},isLate(r.clockIn,settings.schoolStart)?'Terlambat':'Tepat Waktu')
       ),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}},
-        h('div',{style:Object.assign({},gl,{borderRadius:'8px',padding:'12px'})},h('p',{style:{color:'rgba(0,240,255,.4)',fontSize:'9px',fontFamily:MONO,letterSpacing:'0.1em',marginBottom:'4px'}},'MASUK'),h('p',{style:{fontFamily:ORB,fontSize:'14px',fontWeight:'bold',color:'#00f0ff'}},r.clockIn||'--:--'),r.clockInPhoto&&h('img',{src:r.clockInPhoto,style:{width:'100%',height:'56px',objectFit:'cover',borderRadius:'4px',marginTop:'8px',opacity:.7}})),
-        h('div',{style:Object.assign({},gl,{borderRadius:'8px',padding:'12px'})},h('p',{style:{color:'rgba(168,85,247,.4)',fontSize:'9px',fontFamily:MONO,letterSpacing:'0.1em',marginBottom:'4px'}},'PULANG'),h('p',{style:{fontFamily:ORB,fontSize:'14px',fontWeight:'bold',color:'#a855f7'}},r.clockOut||'--:--'),r.clockOutPhoto&&h('img',{src:r.clockOutPhoto,style:{width:'100%',height:'56px',objectFit:'cover',borderRadius:'4px',marginTop:'8px',opacity:.7}}))
+        h('div',{style:Object.assign({},gl,{borderRadius:'8px',padding:'12px'})},h('p',{style:{color:'rgba(0,240,255,.4)',fontSize:'9px',fontFamily:MONO,letterSpacing:'0.1em',marginBottom:'4px'}},'MASUK'),h('p',{style:{fontFamily:ORB,fontSize:'14px',fontWeight:'bold',color:'#00f0ff'}},r.clockIn||'--:--'),r.clockInStatus&&h('span',{style:{fontSize:'9px',fontFamily:MONO,marginTop:'2px',display:'block',color:r.clockInStatus==='cepat'?'#00f0ff':r.clockInStatus==='terlambat'?'#fb923c':'#00ff88'}},r.clockInStatus==='cepat'?'Cepat Datang':r.clockInStatus==='terlambat'?'Terlambat':'Tepat Waktu'),r.clockInPhoto&&h('img',{src:r.clockInPhoto,style:{width:'100%',height:'56px',objectFit:'cover',borderRadius:'4px',marginTop:'8px',opacity:.7}})),
+        h('div',{style:Object.assign({},gl,{borderRadius:'8px',padding:'12px'})},h('p',{style:{color:'rgba(168,85,247,.4)',fontSize:'9px',fontFamily:MONO,letterSpacing:'0.1em',marginBottom:'4px'}},'PULANG'),h('p',{style:{fontFamily:ORB,fontSize:'14px',fontWeight:'bold',color:'#a855f7'}},r.clockOut||'--:--'),r.clockOutStatus&&h('span',{style:{fontSize:'9px',fontFamily:MONO,marginTop:'4px',display:'block',color:r.clockOutStatus==='lembur'?'#00ff88':r.clockOutStatus==='cepat'?'#f87171':'#a855f7'}},r.clockOutStatus==='lembur'?'Lembur':r.clockOutStatus==='cepat'?'Cepat Pulang':'Tepat Waktu'),r.clockOutPhoto&&h('img',{src:r.clockOutPhoto,style:{width:'100%',height:'56px',objectFit:'cover',borderRadius:'4px',marginTop:'8px',opacity:.7}}))
       ),
       s&&s.phone&&h('button',{onClick:()=>kirimWALaporan(r,s,settings),style:{marginTop:'8px',width:'100%',padding:'8px',borderRadius:'10px',background:'rgba(37,211,102,.08)',border:'1px solid rgba(37,211,102,.25)',color:'#25d366',fontSize:'9px',fontFamily:MONO,cursor:'pointer'}},'📱 Kirim WA ke Orang Tua')
     );})
@@ -1308,13 +1308,21 @@ function StudentHome({student,records,settings,school,announcements,leaves,onOpe
         h('div',{style:Object.assign({},gl,{borderRadius:'12px',padding:'16px',border:'1px solid rgba(0,240,255,.1)'})},
           h('p',{style:{color:'rgba(0,240,255,.4)',fontSize:'9px',fontFamily:MONO,letterSpacing:'0.1em',marginBottom:'8px'}},'MASUK'),
           todayRec&&todayRec.clockIn
-            ?h(Fragment,null,h('p',{style:{fontFamily:ORB,fontSize:'20px',fontWeight:'bold',color:'#00f0ff'}},todayRec.clockIn),todayRec.clockInPhoto&&h('img',{src:todayRec.clockInPhoto,style:{width:'100%',height:'56px',objectFit:'cover',borderRadius:'8px',marginTop:'8px',opacity:.8}}),h('span',{style:{fontSize:'9px',fontFamily:MONO,marginTop:'4px',display:'block',color:isLate(todayRec.clockIn,settings.schoolStart)?'#fb923c':'#00ff88'}},isLate(todayRec.clockIn,settings.schoolStart)?'Terlambat':'Tepat Waktu'))
+            ?h(Fragment,null,
+                h('p',{style:{fontFamily:ORB,fontSize:'20px',fontWeight:'bold',color:'#00f0ff'}},todayRec.clockIn),
+                todayRec.clockInPhoto&&h('img',{src:todayRec.clockInPhoto,style:{width:'100%',height:'56px',objectFit:'cover',borderRadius:'8px',marginTop:'8px',opacity:.8}}),
+                h('span',{style:{fontSize:'9px',fontFamily:MONO,marginTop:'4px',display:'block',color:todayRec.clockInStatus==='cepat'?'#00f0ff':todayRec.clockInStatus==='terlambat'?'#fb923c':'#00ff88'}},
+                  todayRec.clockInStatus==='cepat'?'Cepat Datang':todayRec.clockInStatus==='terlambat'?'Terlambat':'Tepat Waktu'))
             :h('p',{style:{fontFamily:ORB,fontSize:'18px',color:'rgba(255,255,255,.2)'}},'--:--')
         ),
         h('div',{style:Object.assign({},gl,{borderRadius:'12px',padding:'16px',border:'1px solid rgba(168,85,247,.1)'})},
           h('p',{style:{color:'rgba(168,85,247,.4)',fontSize:'9px',fontFamily:MONO,letterSpacing:'0.1em',marginBottom:'8px'}},'PULANG'),
           todayRec&&todayRec.clockOut
-            ?h(Fragment,null,h('p',{style:{fontFamily:ORB,fontSize:'20px',fontWeight:'bold',color:'#a855f7'}},todayRec.clockOut),todayRec.clockOutPhoto&&h('img',{src:todayRec.clockOutPhoto,style:{width:'100%',height:'56px',objectFit:'cover',borderRadius:'8px',marginTop:'8px',opacity:.8}}))
+            ?h(Fragment,null,
+                h('p',{style:{fontFamily:ORB,fontSize:'20px',fontWeight:'bold',color:'#a855f7'}},todayRec.clockOut),
+                todayRec.clockOutStatus&&h('span',{style:{fontSize:'9px',fontFamily:MONO,marginTop:'4px',display:'block',color:todayRec.clockOutStatus==='lembur'?'#00ff88':todayRec.clockOutStatus==='cepat'?'#f87171':'#a855f7'}},
+                  todayRec.clockOutStatus==='lembur'?'Lembur':todayRec.clockOutStatus==='cepat'?'Cepat Pulang':'Tepat Waktu'),
+                todayRec.clockOutPhoto&&h('img',{src:todayRec.clockOutPhoto,style:{width:'100%',height:'56px',objectFit:'cover',borderRadius:'8px',marginTop:'8px',opacity:.8}}))
             :h('p',{style:{fontFamily:ORB,fontSize:'18px',color:'rgba(255,255,255,.2)'}},'--:--')
         )
       )
@@ -1346,7 +1354,7 @@ function StudentHistory({student,records,settings}) {
       ),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}},
         h('div',{style:Object.assign({},gl,{borderRadius:'8px',padding:'12px'})},h('p',{style:{color:'rgba(0,240,255,.4)',fontSize:'9px',fontFamily:MONO,letterSpacing:'0.1em',marginBottom:'4px'}},'MASUK'),h('p',{style:{fontFamily:ORB,fontSize:'14px',fontWeight:'bold',color:'#00f0ff'}},r.clockIn||'--:--'),r.clockInPhoto&&h('img',{src:r.clockInPhoto,style:{width:'100%',height:'48px',objectFit:'cover',borderRadius:'4px',marginTop:'8px',opacity:.7}}),r.clockInLocation&&h('a',{href:'https://www.google.com/maps?q='+r.clockInLocation.lat+','+r.clockInLocation.lng,target:'_blank',rel:'noopener noreferrer',style:{fontSize:'8px',fontFamily:MONO,color:'rgba(255,255,255,.3)',display:'block',marginTop:'4px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textDecoration:'none'}},'\uD83D\uDCCD '+(r.clockInLocation.address||fmtCoords(r.clockInLocation)))),
-        h('div',{style:Object.assign({},gl,{borderRadius:'8px',padding:'12px'})},h('p',{style:{color:'rgba(168,85,247,.4)',fontSize:'9px',fontFamily:MONO,letterSpacing:'0.1em',marginBottom:'4px'}},'PULANG'),h('p',{style:{fontFamily:ORB,fontSize:'14px',fontWeight:'bold',color:'#a855f7'}},r.clockOut||'--:--'),r.clockOutPhoto&&h('img',{src:r.clockOutPhoto,style:{width:'100%',height:'48px',objectFit:'cover',borderRadius:'4px',marginTop:'8px',opacity:.7}}))
+        h('div',{style:Object.assign({},gl,{borderRadius:'8px',padding:'12px'})},h('p',{style:{color:'rgba(168,85,247,.4)',fontSize:'9px',fontFamily:MONO,letterSpacing:'0.1em',marginBottom:'4px'}},'PULANG'),h('p',{style:{fontFamily:ORB,fontSize:'14px',fontWeight:'bold',color:'#a855f7'}},r.clockOut||'--:--'),r.clockOutStatus&&h('span',{style:{fontSize:'9px',fontFamily:MONO,marginTop:'4px',display:'block',color:r.clockOutStatus==='lembur'?'#00ff88':r.clockOutStatus==='cepat'?'#f87171':'#a855f7'}},r.clockOutStatus==='lembur'?'Lembur':r.clockOutStatus==='cepat'?'Cepat Pulang':'Tepat Waktu'),r.clockOutPhoto&&h('img',{src:r.clockOutPhoto,style:{width:'100%',height:'48px',objectFit:'cover',borderRadius:'4px',marginTop:'8px',opacity:.7}}))
       )
     ))
   );
@@ -2051,13 +2059,29 @@ function StudentPanel({student,onLogout}) {
     let rec;
     const action=camAction;
     setCamAction(null);
+    let clockOutStatus=null;
+    let clockInStatus=null;
     if(action==='in'){
+      // Hitung status masuk: cepat datang / tepat / terlambat
+      const [ss_h,ss_m]=(settings.schoolStart||'07:00').split(':').map(Number);
+      const [ci_h,ci_m]=time.split(':').map(Number);
+      const sekolahMasukMenit=ss_h*60+ss_m;
+      const datangMenit=ci_h*60+ci_m;
+      const selisihMasuk=datangMenit-sekolahMasukMenit;
+      const clockInStatus=selisihMasuk<-15?'cepat':selisihMasuk>0?'terlambat':'tepat';
       rec=existing
-        ?Object.assign({},existing,{clockIn:time,clockInPhoto:photo,clockInLocation:location||null,clockInDistance:distance!=null?distance:null,deviceId:student.deviceId})
-        :{id:uid(),studentId:student.id,studentName:student.name,studentCode:student.studentCode,date,clockIn:time,clockInPhoto:photo,clockInLocation:location||null,clockInDistance:distance!=null?distance:null,deviceId:student.deviceId};
+        ?Object.assign({},existing,{clockIn:time,clockInStatus,clockInPhoto:photo,clockInLocation:location||null,clockInDistance:distance!=null?distance:null,deviceId:student.deviceId})
+        :{id:uid(),studentId:student.id,studentName:student.name,studentCode:student.studentCode,date,clockIn:time,clockInStatus,clockInPhoto:photo,clockInLocation:location||null,clockInDistance:distance!=null?distance:null,deviceId:student.deviceId};
     } else {
       if(!existing){showToast('Data absen masuk tidak ditemukan','error');return;}
-      rec=Object.assign({},existing,{clockOut:time,clockOutPhoto:photo,clockOutLocation:location||null,clockOutDistance:distance!=null?distance:null});
+      // Hitung status pulang: cepat/tepat/lembur
+      const [se_h,se_m]=(settings.schoolEnd||'15:00').split(':').map(Number);
+      const [co_h,co_m]=time.split(':').map(Number);
+      const sekolahMenit=se_h*60+se_m;
+      const pulangMenit=co_h*60+co_m;
+      const selisih=pulangMenit-sekolahMenit;
+      const clockOutStatus=selisih<-15?'cepat':selisih>30?'lembur':'tepat';
+      rec=Object.assign({},existing,{clockOut:time,clockOutStatus,clockOutPhoto:photo,clockOutLocation:location||null,clockOutDistance:distance!=null?distance:null});
     }
     // Optimistic UI: langsung update records lokal dulu sebelum API selesai
     setRecords(prev=>{const others=prev.filter(r=>r.date!==date);return [...others,rec];});
@@ -2067,7 +2091,9 @@ function StudentPanel({student,onLogout}) {
       await reload();return;
     }
     await DB.addLog(student.name,action==='in'?'Absen Masuk':'Absen Pulang',time);
-    showToast(action==='in'?'✅ Absen Masuk berhasil! Jam '+time:'✅ Absen Pulang berhasil! Jam '+time,'success');
+    const cosMsg=clockOutStatus==='lembur'?' (Lembur)':clockOutStatus==='cepat'?' (Cepat Pulang)':' (Tepat Waktu)';
+    const cisMsg=clockInStatus==='cepat'?' (Cepat Datang)':clockInStatus==='terlambat'?' (Terlambat)':' (Tepat Waktu)';
+    showToast(action==='in'?'\u2705 Absen Masuk berhasil! Jam '+time+cisMsg:'\u2705 Absen Pulang berhasil! Jam '+time+cosMsg,'success');
     await reload();
   };
 
@@ -2139,78 +2165,75 @@ var deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e){
   e.preventDefault();
   deferredPrompt = e;
-  setTimeout(function(){
-    if(!deferredPrompt) return;
-    var banner = document.createElement('div');
-    banner.id = 'pwa-banner';
-    banner.style.position = 'fixed';
-    banner.style.bottom = '80px';
-    banner.style.left = '50%';
-    banner.style.transform = 'translateX(-50%)';
-    banner.style.zIndex = '9999';
-    banner.style.background = 'rgba(15,15,26,.95)';
-    banner.style.border = '1px solid rgba(0,240,255,.3)';
-    banner.style.borderRadius = '16px';
-    banner.style.padding = '12px 20px';
-    banner.style.display = 'flex';
-    banner.style.alignItems = 'center';
-    banner.style.gap = '12px';
-    banner.style.backdropFilter = 'blur(20px)';
-    banner.style.boxShadow = '0 8px 32px rgba(0,0,0,.5)';
-    banner.style.maxWidth = '360px';
-    banner.style.width = 'calc(100% - 32px)';
-
-    var icon = document.createElement('span');
-    icon.style.fontSize = '24px';
-    icon.textContent = '📲';
-
-    var info = document.createElement('div');
-    info.style.flex = '1';
-    var title = document.createElement('p');
-    title.style.cssText = 'color:#fff;font-size:13px;font-weight:600;margin:0';
-    title.textContent = 'Install AbsensiKu';
-    var sub = document.createElement('p');
-    sub.style.cssText = 'color:rgba(255,255,255,.4);font-size:11px;margin:2px 0 0';
-    sub.textContent = 'Tambah ke layar utama';
-    info.appendChild(title);
-    info.appendChild(sub);
-
-    var btnInstall = document.createElement('button');
-    btnInstall.style.cssText = 'background:rgba(0,240,255,.15);border:1px solid rgba(0,240,255,.4);color:#00f0ff;padding:8px 14px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600';
-    btnInstall.textContent = 'Install';
-    btnInstall.onclick = function(){ installPWA(); };
-
-    var btnClose = document.createElement('button');
-    btnClose.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;font-size:18px;padding:0 4px';
-    btnClose.textContent = 'x';
-    btnClose.onclick = function(){
-      var b = document.getElementById('pwa-banner');
-      if(b) b.remove();
-    };
-
-    banner.appendChild(icon);
-    banner.appendChild(info);
-    banner.appendChild(btnInstall);
-    banner.appendChild(btnClose);
-    document.body.appendChild(banner);
-  }, 3000);
+  showInstallModal();
 });
 
-function installPWA(){
-  if(deferredPrompt){
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then(function(){
-      deferredPrompt = null;
-      var b = document.getElementById('pwa-banner');
-      if(b) b.remove();
-    });
-  }
+function showInstallModal(){
+  if(document.getElementById('pwa-modal')) return;
+
+  var overlay = document.createElement('div');
+  overlay.id = 'pwa-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.75);backdrop-filter:blur(10px)';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#0f0f1a;border:1px solid rgba(0,240,255,.4);border-radius:24px;padding:32px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 0 60px rgba(0,240,255,.2)';
+
+  var icon = document.createElement('div');
+  icon.style.cssText = 'font-size:56px;margin-bottom:16px';
+  icon.textContent = '📲';
+
+  var title = document.createElement('h2');
+  title.style.cssText = 'font-family:Orbitron,monospace;font-size:18px;font-weight:700;color:#fff;letter-spacing:0.1em;margin-bottom:6px';
+  title.innerHTML = 'ABSENSI<span style="color:#a855f7">KU</span>';
+
+  var sub = document.createElement('p');
+  sub.style.cssText = 'color:rgba(0,240,255,.7);font-size:12px;font-family:JetBrains Mono,monospace;letter-spacing:0.2em;margin-bottom:20px';
+  sub.textContent = 'Install Aplikasi';
+
+  var desc = document.createElement('p');
+  desc.style.cssText = 'color:rgba(255,255,255,.5);font-size:13px;line-height:1.6;margin-bottom:28px';
+  desc.textContent = 'Install AbsensiKu ke perangkat Anda. App akan tersedia di layar utama dan dapat di-uninstall seperti app biasa.';
+
+  var btnInstall = document.createElement('button');
+  btnInstall.style.cssText = 'width:100%;padding:16px;border-radius:14px;background:linear-gradient(135deg,rgba(0,240,255,.2),rgba(168,85,247,.2));border:1px solid rgba(0,240,255,.5);color:#00f0ff;font-family:Orbitron,monospace;font-size:13px;font-weight:700;letter-spacing:0.2em;cursor:pointer;margin-bottom:12px';
+  btnInstall.textContent = 'INSTALL SEKARANG';
+  btnInstall.onclick = function(){
+    var m = document.getElementById('pwa-modal');
+    if(m) m.remove();
+    if(deferredPrompt){
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(){ deferredPrompt = null; });
+    }
+  };
+
+  var btnSkip = document.createElement('button');
+  btnSkip.style.cssText = 'width:100%;padding:12px;border-radius:14px;background:none;border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.3);font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer';
+  btnSkip.textContent = 'Nanti saja';
+  btnSkip.onclick = function(){
+    var m = document.getElementById('pwa-modal');
+    if(m) m.remove();
+  };
+
+  box.appendChild(icon);
+  box.appendChild(title);
+  box.appendChild(sub);
+  box.appendChild(desc);
+  box.appendChild(btnInstall);
+  box.appendChild(btnSkip);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
 }
 
 window.addEventListener('appinstalled', function(){
-  var b = document.getElementById('pwa-banner');
-  if(b) b.remove();
   deferredPrompt = null;
+  var m = document.getElementById('pwa-modal');
+  if(m) m.remove();
+  // Tampilkan konfirmasi berhasil
+  var toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:99999;background:rgba(0,255,136,.15);border:1px solid rgba(0,255,136,.4);border-radius:12px;padding:14px 24px;color:#00ff88;font-family:JetBrains Mono,monospace;font-size:13px;text-align:center;backdrop-filter:blur(20px)';
+  toast.textContent = 'AbsensiKu berhasil diinstall!';
+  document.body.appendChild(toast);
+  setTimeout(function(){ toast.remove(); }, 3000);
 });
 </script>
 </body>
