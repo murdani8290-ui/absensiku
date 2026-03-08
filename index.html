@@ -384,7 +384,11 @@ function CameraView({action,school,student,onCapture,onClose}) {
     if(loc)ctx.fillText('Lokasi: '+(loc.address||fmtCoords(loc)),12,c.height-bH+56);
     if(dist!==null){ctx.fillStyle=inside?'#00ff88':'#ff4444';ctx.font='bold 11px monospace';ctx.fillText((inside?'DALAM':'LUAR')+' Area '+school.locationName+' ('+fmtDist(dist)+')',12,c.height-bH+74);}
     setFlash(true); setTimeout(()=>setFlash(false),300);
-    const photo=c.toDataURL('image/jpeg',.85);
+    // Resize foto agar tidak terlalu besar (max 640px)
+    const maxW=640,scale=Math.min(1,maxW/c.width);
+    const oc=document.createElement('canvas');oc.width=Math.round(c.width*scale);oc.height=Math.round(c.height*scale);
+    oc.getContext('2d').drawImage(c,0,0,oc.width,oc.height);
+    const photo=oc.toDataURL('image/jpeg',.45);
     if(streamRef.current)streamRef.current.getTracks().forEach(t=>t.stop());
     onCapture(photo,loc,dist);
   },[action,loc,facing,onCapture,dist,inside,school,student,isIn]);
@@ -1153,6 +1157,8 @@ function StudentPanel({student,onLogout}) {
   const[leaves,setLeaves]=useState([]);
   const[settings,setSettings]=useState(null);
   const[anns,setAnns]=useState([]);
+  const[toast,setToast]=useState(null);
+  const showToast=(msg,type)=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
 
   const reload=useCallback(async()=>{
     const[rec,lv,set_,an]=await Promise.all([DB.getRecords(),DB.getLeaves(),DB.getSettings(),DB.getAnnouncements()]);
@@ -1166,22 +1172,35 @@ function StudentPanel({student,onLogout}) {
     const now=new Date();const time=fmtTime(now).substring(0,5);const date=todayStr();
     const existing=records.find(r=>r.date===date);
     let rec;
-    if(camAction==='in'){
-      rec=existing?Object.assign({},existing,{clockIn:time,clockInPhoto:photo,clockInLocation:location||null,clockInDistance:distance!=null?distance:null,deviceId:student.deviceId}):{id:uid(),studentId:student.id,studentName:student.name,studentCode:student.studentCode,date,clockIn:time,clockInPhoto:photo,clockInLocation:location||null,clockInDistance:distance!=null?distance:null,deviceId:student.deviceId};
-      await DB.addLog(student.name,'Absen Masuk',time);
+    const action=camAction;
+    setCamAction(null);
+    if(action==='in'){
+      rec=existing
+        ?Object.assign({},existing,{clockIn:time,clockInPhoto:photo,clockInLocation:location||null,clockInDistance:distance!=null?distance:null,deviceId:student.deviceId})
+        :{id:uid(),studentId:student.id,studentName:student.name,studentCode:student.studentCode,date,clockIn:time,clockInPhoto:photo,clockInLocation:location||null,clockInDistance:distance!=null?distance:null,deviceId:student.deviceId};
     } else {
-      if(!existing)return;
+      if(!existing){showToast('Data absen masuk tidak ditemukan','error');return;}
       rec=Object.assign({},existing,{clockOut:time,clockOutPhoto:photo,clockOutLocation:location||null,clockOutDistance:distance!=null?distance:null});
-      await DB.addLog(student.name,'Absen Pulang',time);
     }
-    await DB.upsertRecord(rec);
-    setCamAction(null);await reload();
+    // Optimistic UI: langsung update records lokal dulu sebelum API selesai
+    setRecords(prev=>{const others=prev.filter(r=>r.date!==date);return [...others,rec];});
+    const {error}=await DB.upsertRecord(rec);
+    if(error){
+      showToast('Gagal menyimpan: '+error,'error');
+      await reload();return;
+    }
+    await DB.addLog(student.name,action==='in'?'Absen Masuk':'Absen Pulang',time);
+    showToast(action==='in'?'✅ Absen Masuk berhasil! Jam '+time:'✅ Absen Pulang berhasil! Jam '+time,'success');
+    await reload();
   };
 
   if(loading||!settings)return h(LoadingScreen,{msg:'Memuat data...'});
   const nav=[{id:'home',label:'Beranda',icon:'\uD83C\uDFE0'},{id:'history',label:'Riwayat',icon:'\uD83D\uDCDC'},{id:'calendar',label:'Kalender',icon:'\uD83D\uDCC5'},{id:'leave',label:'Izin',icon:'\uD83D\uDCDD'},{id:'profile',label:'Profil',icon:'\uD83D\uDC64'}];
   return h('div',{style:{minHeight:'100vh',background:'#0a0a0f',color:'#fff',position:'relative'}},
     h(ParticleBg),
+    toast&&h('div',{style:{position:'fixed',top:'72px',left:'50%',transform:'translateX(-50%)',zIndex:100,background:toast.type==='success'?'rgba(0,255,136,.15)':'rgba(239,68,68,.15)',border:'1px solid '+(toast.type==='success'?'rgba(0,255,136,.4)':'rgba(239,68,68,.4)'),borderRadius:'16px',padding:'14px 24px',backdropFilter:'blur(20px)',boxShadow:'0 8px 32px rgba(0,0,0,.5)',maxWidth:'340px',width:'calc(100% - 32px)',textAlign:'center'}},
+      h('p',{style:{color:toast.type==='success'?'#00ff88':'#f87171',fontFamily:MONO,fontSize:'13px',fontWeight:'600',lineHeight:'1.5'}},toast.msg)
+    ),
     h('header',{style:Object.assign({},glS,{position:'sticky',top:0,zIndex:30,borderBottom:'1px solid rgba(0,240,255,.1)'})},
       h('div',{style:{maxWidth:'512px',margin:'0 auto',padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}},
         h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
@@ -1227,36 +1246,94 @@ ReactDOM.createRoot(document.getElementById('root')).render(h(App));
 <!-- PWA Install Prompt -->
 <script>
 if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
+  window.addEventListener('load', function(){
+    // Hanya register SW jika bukan di preview/localhost Claude
+    var hostname = window.location.hostname;
+    var isPreview = hostname.includes('claudeusercontent') || hostname.includes('localhost') || hostname === '127.0.0.1';
+    if(isPreview) return;
     navigator.serviceWorker.register('sw.js')
-      .then(r=>console.log('SW registered'))
-      .catch(e=>console.log('SW error:',e));
+      .then(function(r){ console.log('[AbsensiKu] SW aktif:', r.scope); })
+      .catch(function(e){ console.warn('[AbsensiKu] SW tidak tersedia:', e.message); });
   });
 }
 
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt',(e)=>{
+var deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', function(e){
   e.preventDefault();
-  deferredPrompt=e;
-  setTimeout(()=>{
-    if(!deferredPrompt)return;
-    const banner=document.createElement('div');
-    banner.id='pwa-banner';
-    banner.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(15,15,26,.95);border:1px solid rgba(0,240,255,.3);border-radius:16px;padding:12px 20px;display:flex;align-items:center;gap:12px;backdrop-filter:blur(20px);box-shadow:0 8px 32px rgba(0,0,0,.5);max-width:360px;width:calc(100% - 32px)';
-    banner.innerHTML='<span style="font-size:24px">📲</span><div style="flex:1"><p style="color:#fff;font-size:13px;font-weight:600;margin:0">Install AbsensiKu</p><p style="color:rgba(255,255,255,.4);font-size:11px;margin:2px 0 0">Tambah ke layar utama</p></div><button onclick="installPWA()" style="background:rgba(0,240,255,.15);border:1px solid rgba(0,240,255,.4);color:#00f0ff;padding:8px 14px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600">Install</button><button onclick="document.getElementById('pwa-banner').remove()" style="background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;font-size:18px;padding:0 4px">x</button>';
+  deferredPrompt = e;
+  setTimeout(function(){
+    if(!deferredPrompt) return;
+    var banner = document.createElement('div');
+    banner.id = 'pwa-banner';
+    banner.style.position = 'fixed';
+    banner.style.bottom = '80px';
+    banner.style.left = '50%';
+    banner.style.transform = 'translateX(-50%)';
+    banner.style.zIndex = '9999';
+    banner.style.background = 'rgba(15,15,26,.95)';
+    banner.style.border = '1px solid rgba(0,240,255,.3)';
+    banner.style.borderRadius = '16px';
+    banner.style.padding = '12px 20px';
+    banner.style.display = 'flex';
+    banner.style.alignItems = 'center';
+    banner.style.gap = '12px';
+    banner.style.backdropFilter = 'blur(20px)';
+    banner.style.boxShadow = '0 8px 32px rgba(0,0,0,.5)';
+    banner.style.maxWidth = '360px';
+    banner.style.width = 'calc(100% - 32px)';
+
+    var icon = document.createElement('span');
+    icon.style.fontSize = '24px';
+    icon.textContent = '📲';
+
+    var info = document.createElement('div');
+    info.style.flex = '1';
+    var title = document.createElement('p');
+    title.style.cssText = 'color:#fff;font-size:13px;font-weight:600;margin:0';
+    title.textContent = 'Install AbsensiKu';
+    var sub = document.createElement('p');
+    sub.style.cssText = 'color:rgba(255,255,255,.4);font-size:11px;margin:2px 0 0';
+    sub.textContent = 'Tambah ke layar utama';
+    info.appendChild(title);
+    info.appendChild(sub);
+
+    var btnInstall = document.createElement('button');
+    btnInstall.style.cssText = 'background:rgba(0,240,255,.15);border:1px solid rgba(0,240,255,.4);color:#00f0ff;padding:8px 14px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600';
+    btnInstall.textContent = 'Install';
+    btnInstall.onclick = function(){ installPWA(); };
+
+    var btnClose = document.createElement('button');
+    btnClose.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;font-size:18px;padding:0 4px';
+    btnClose.textContent = 'x';
+    btnClose.onclick = function(){
+      var b = document.getElementById('pwa-banner');
+      if(b) b.remove();
+    };
+
+    banner.appendChild(icon);
+    banner.appendChild(info);
+    banner.appendChild(btnInstall);
+    banner.appendChild(btnClose);
     document.body.appendChild(banner);
-  },3000);
+  }, 3000);
 });
 
 function installPWA(){
   if(deferredPrompt){
     deferredPrompt.prompt();
-    deferredPrompt.userChoice.then(()=>{deferredPrompt=null;const b=document.getElementById('pwa-banner');if(b)b.remove();});
+    deferredPrompt.userChoice.then(function(){
+      deferredPrompt = null;
+      var b = document.getElementById('pwa-banner');
+      if(b) b.remove();
+    });
   }
 }
 
-window.addEventListener('appinstalled',()=>{
-  const b=document.getElementById('pwa-banner');if(b)b.remove();deferredPrompt=null;
+window.addEventListener('appinstalled', function(){
+  var b = document.getElementById('pwa-banner');
+  if(b) b.remove();
+  deferredPrompt = null;
 });
 </script>
 </body>
