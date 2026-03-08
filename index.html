@@ -138,7 +138,7 @@ const sb = {
 // ================================================================
 // HELPERS
 // ================================================================
-const fmtTime = d => d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+const fmtTime = d => { const h=String(d.getHours()).padStart(2,'0'),m=String(d.getMinutes()).padStart(2,'0'),s=String(d.getSeconds()).padStart(2,'0'); return h+':'+m+':'+s; };
 const fmtDate = d => d.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 const fmtShort = s => { try { return new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}); } catch(e) { return s; }};
 const todayStr = () => new Date().toISOString().split('T')[0];
