@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>AbsensiKu — Sistem Absensi Siswa Digital</title>
 
 <!-- PWA Meta Tags -->
@@ -22,7 +22,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;scrollbar-color:#2a2a45 transparent}
-body{background:var(--bg-base);font-family:'Inter',sans-serif;overflow-x:hidden;color:var(--text-primary)}
+body{background:var(--bg-base);font-family:'Inter',sans-serif;overflow-x:hidden;color:var(--text-primary);touch-action:pan-x pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+*{-webkit-tap-highlight-color:transparent;box-sizing:border-box}
+input,textarea,select{font-size:16px!important}
 @keyframes pulse-glow{0%,100%{box-shadow:0 0 20px rgba(0,240,255,.3)}50%{box-shadow:0 0 40px rgba(0,240,255,.6)}}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
 @keyframes scan-line{0%{top:-5%}100%{top:105%}}
@@ -756,6 +758,21 @@ function applyTheme(themeId) {
 
 // Apply saved theme on load
 applyTheme(_currentTheme);
+
+  // ── Disable pinch zoom & double-tap zoom ──────────────────
+  document.addEventListener('gesturestart', e => e.preventDefault(), {passive:false});
+  document.addEventListener('gesturechange', e => e.preventDefault(), {passive:false});
+  document.addEventListener('gestureend', e => e.preventDefault(), {passive:false});
+  let lastTap = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if(now - lastTap < 300) e.preventDefault();
+    lastTap = now;
+  }, {passive:false});
+  // Prevent ctrl+scroll zoom di desktop
+  document.addEventListener('wheel', e => { if(e.ctrlKey) e.preventDefault(); }, {passive:false});
+  // ─────────────────────────────────────────────────────────
+
 
 
 
