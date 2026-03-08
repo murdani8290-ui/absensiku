@@ -43,6 +43,7 @@ input[type=date],select{color-scheme:dark}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script>
 'use strict';
 const {useState,useEffect,useRef,useCallback,createElement:h,Fragment} = React;
@@ -1963,12 +1964,308 @@ function StudentAttendanceGrade({student,records,settings,holidays}) {
 // ============================================================
 // STUDENT: QR CODE VIEWER
 // ============================================================
+
+// ============================================================
+// STUDENT: KARTU SISWA DIGITAL
+// ============================================================
+function StudentKartu({student, settings}) {
+  const ref = useRef(null);
+  useEffect(()=>{
+    if(!ref.current||!window.QRCode) return;
+    ref.current.innerHTML='';
+    new window.QRCode(ref.current,{text:student.studentCode+'|'+student.id,width:80,height:80,colorDark:'#0a0a0f',colorLight:'#ffffff',correctLevel:window.QRCode.CorrectLevel.M});
+  },[student]);
+
+  const downloadKartu = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 638; canvas.height = 1008;
+    const ctx = canvas.getContext('2d');
+    // Background gelap
+    const grad = ctx.createLinearGradient(0,0,638,1008);
+    grad.addColorStop(0,'#0a0a1f'); grad.addColorStop(1,'#1a0a2f');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,638,1008);
+    // Border
+    ctx.strokeStyle='rgba(0,240,255,0.6)'; ctx.lineWidth=4; ctx.strokeRect(8,8,622,992);
+    ctx.strokeStyle='rgba(168,85,247,0.3)'; ctx.lineWidth=1; ctx.strokeRect(18,18,602,972);
+    // Header
+    ctx.fillStyle='rgba(0,240,255,0.1)'; ctx.fillRect(0,0,638,180);
+    ctx.fillStyle='#00f0ff'; ctx.font='bold 52px monospace'; ctx.textAlign='center';
+    ctx.fillText('ABSENSI', 319, 80);
+    ctx.fillStyle='#a855f7'; ctx.fillText('KU', 450, 80);
+    ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font='18px monospace';
+    ctx.fillText(settings.schoolName||'Sekolah', 319, 120);
+    ctx.fillStyle='rgba(0,240,255,0.4)'; ctx.font='13px monospace';
+    ctx.fillText('KARTU IDENTITAS SISWA', 319, 155);
+    // Avatar circle
+    ctx.beginPath(); ctx.arc(319,290,80,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,240,255,0.1)'; ctx.fill();
+    ctx.strokeStyle='rgba(0,240,255,0.6)'; ctx.lineWidth=3; ctx.stroke();
+    ctx.fillStyle='#00f0ff'; ctx.font='bold 72px monospace'; ctx.textAlign='center';
+    ctx.fillText(student.name.charAt(0).toUpperCase(), 319, 315);
+    // Info
+    const info = [
+      ['NAMA', student.name],
+      ['NIS', student.nis||'-'],
+      ['KELAS', student.kelas||'-'],
+      ['KODE', student.studentCode],
+    ];
+    let y=430;
+    info.forEach(([lbl,val])=>{
+      ctx.fillStyle='rgba(255,255,255,0.3)'; ctx.font='16px monospace'; ctx.textAlign='left';
+      ctx.fillText(lbl, 80, y);
+      ctx.fillStyle='#fff'; ctx.font='bold 22px monospace';
+      ctx.fillText(val, 80, y+30);
+      ctx.fillStyle='rgba(0,240,255,0.2)'; ctx.fillRect(80,y+40,478,1);
+      y+=80;
+    });
+    // QR placeholder text
+    ctx.fillStyle='rgba(255,255,255,0.3)'; ctx.font='13px monospace'; ctx.textAlign='center';
+    ctx.fillText('Scan QR di aplikasi untuk verifikasi', 319, y+40);
+    // Footer
+    ctx.fillStyle='rgba(255,255,255,0.1)'; ctx.fillRect(0,920,638,88);
+    ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='14px monospace'; ctx.textAlign='center';
+    ctx.fillText('AbsensiKu - Sistem Absensi Digital', 319, 970);
+    const link=document.createElement('a');
+    link.href=canvas.toDataURL('image/png');
+    link.download='kartu_'+student.studentCode+'.png';
+    link.click();
+  };
+
+  return h('div',{className:'afiu',style:{display:'flex',flexDirection:'column',gap:'16px'}},
+    h('p',{style:{fontFamily:'Orbitron,monospace',fontSize:'12px',color:'rgba(255,255,255,.6)',letterSpacing:'0.1em',textTransform:'uppercase'}},'Kartu Identitas Saya'),
+    // Kartu visual
+    h('div',{style:{background:'linear-gradient(135deg,#0a0a1f,#1a0a2f)',borderRadius:'20px',padding:'28px 24px',border:'1px solid rgba(0,240,255,.4)',boxShadow:'0 0 40px rgba(0,240,255,.1)',position:'relative',overflow:'hidden'}},
+      // Decorative circles
+      h('div',{style:{position:'absolute',top:'-40px',right:'-40px',width:'160px',height:'160px',borderRadius:'50%',background:'rgba(168,85,247,.05)',border:'1px solid rgba(168,85,247,.15)'}}),
+      h('div',{style:{position:'absolute',bottom:'-30px',left:'-30px',width:'120px',height:'120px',borderRadius:'50%',background:'rgba(0,240,255,.05)',border:'1px solid rgba(0,240,255,.1)'}}),
+      // Header kartu
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'24px'}},
+        h('div',null,
+          h('p',{style:{fontFamily:'Orbitron,monospace',fontSize:'18px',fontWeight:'bold',color:'#00f0ff',letterSpacing:'0.15em',margin:0}},'ABSENSI',h('span',{style:{color:'#a855f7'}},'KU')),
+          h('p',{style:{fontSize:'9px',fontFamily:'JetBrains Mono,monospace',color:'rgba(255,255,255,.35)',letterSpacing:'0.2em',marginTop:'3px'}},settings.schoolName||'SEKOLAH')
+        ),
+        h('p',{style:{fontSize:'8px',fontFamily:'JetBrains Mono,monospace',color:'rgba(0,240,255,.5)',letterSpacing:'0.15em',border:'1px solid rgba(0,240,255,.3)',padding:'4px 8px',borderRadius:'6px'}},'ID SISWA')
+      ),
+      // Avatar + info
+      h('div',{style:{display:'flex',gap:'20px',alignItems:'center',marginBottom:'24px'}},
+        h('div',{style:{width:'72px',height:'72px',borderRadius:'50%',background:'rgba(0,240,255,.1)',border:'2px solid rgba(0,240,255,.4)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Orbitron,monospace',fontSize:'28px',fontWeight:'bold',color:'#00f0ff',flexShrink:0}},
+          student.name.charAt(0).toUpperCase()
+        ),
+        h('div',{style:{flex:1}},
+          h('p',{style:{fontFamily:'Orbitron,monospace',fontSize:'15px',fontWeight:'bold',color:'#fff',marginBottom:'6px'}},student.name),
+          h('p',{style:{fontFamily:'JetBrains Mono,monospace',fontSize:'10px',color:'rgba(255,255,255,.4)',marginBottom:'3px'}},'NIS: '+(student.nis||'-')),
+          h('p',{style:{fontFamily:'JetBrains Mono,monospace',fontSize:'10px',color:'rgba(168,85,247,.7)'}},student.kelas||'-')
+        )
+      ),
+      // Divider
+      h('div',{style:{height:'1px',background:'linear-gradient(90deg,transparent,rgba(0,240,255,.3),transparent)',marginBottom:'20px'}}),
+      // QR + kode
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
+        h('div',null,
+          h('p',{style:{fontFamily:'JetBrains Mono,monospace',fontSize:'8px',color:'rgba(255,255,255,.3)',letterSpacing:'0.2em',marginBottom:'6px'}},'KODE SISWA'),
+          h('p',{style:{fontFamily:'Orbitron,monospace',fontSize:'18px',fontWeight:'bold',color:'#00f0ff',letterSpacing:'0.2em'}},student.studentCode),
+          h('p',{style:{fontFamily:'JetBrains Mono,monospace',fontSize:'8px',color:'rgba(255,255,255,.2)',marginTop:'8px'}},'AbsensiKu Digital Card')
+        ),
+        h('div',{style:{background:'#fff',padding:'6px',borderRadius:'10px',border:'2px solid rgba(0,240,255,.4)'}},
+          h('div',{ref,style:{width:'80px',height:'80px'}})
+        )
+      )
+    ),
+    // Tombol download
+    h('button',{onClick:downloadKartu,style:{padding:'14px',borderRadius:'14px',background:'linear-gradient(135deg,rgba(0,240,255,.15),rgba(168,85,247,.15))',border:'1px solid rgba(0,240,255,.4)',color:'#00f0ff',fontFamily:'Orbitron,monospace',fontSize:'12px',fontWeight:'bold',letterSpacing:'0.15em',cursor:'pointer',width:'100%'}},
+      'SIMPAN KARTU'
+    ),
+    h('p',{style:{textAlign:'center',fontSize:'10px',fontFamily:'JetBrains Mono,monospace',color:'rgba(255,255,255,.2)'}},'Tunjukkan kartu ini atau QR kepada admin')
+  );
+}
+
 function StudentQR({student}) {
   return h('div',{className:'afiu',style:{display:'flex',flexDirection:'column',gap:'16px'}},
     h('p',{style:{fontFamily:'Orbitron,monospace',fontSize:'12px',color:'rgba(255,255,255,.6)',letterSpacing:'0.1em',textTransform:'uppercase'}},'QR Code Saya'),
     h('div',{style:{background:'rgba(15,15,26,.7)',backdropFilter:'blur(20px)',borderRadius:'16px',padding:'24px',border:'1px solid rgba(0,240,255,.1)',display:'flex',flexDirection:'column',alignItems:'center',gap:'16px'}},
       h(QRCard,{student}),
       h('p',{style:{color:'rgba(255,255,255,.3)',fontSize:'10px',fontFamily:'JetBrains Mono,monospace',textAlign:'center',lineHeight:'1.6'}},'Tunjukkan QR ini ke admin untuk verifikasi identitas atau absen via scan')
+    )
+  );
+}
+
+
+// ============================================================
+// ADMIN: QR CODE SCANNER
+// ============================================================
+function AdminQRScanner({students, records, settings, onReload}) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const intervalRef = useRef(null);
+  const [scanning, setScanning] = useState(false);
+  const [result, setResult] = useState(null); // {student, record, status}
+  const [error, setError] = useState(null);
+  const [manualCode, setManualCode] = useState('');
+  const [mode, setMode] = useState('in'); // 'in' atau 'out'
+
+  const stopCamera = () => {
+    if(intervalRef.current) clearInterval(intervalRef.current);
+    if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop());
+    streamRef.current = null;
+    setScanning(false);
+  };
+
+  const startCamera = async () => {
+    setError(null); setResult(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+      streamRef.current = stream;
+      if(videoRef.current) { videoRef.current.srcObject=stream; videoRef.current.play(); }
+      setScanning(true);
+      // Scan setiap 500ms pakai jsQR jika tersedia, kalau tidak pakai manual
+      intervalRef.current = setInterval(()=>{ tryScan(); }, 500);
+    } catch(e) { setError('Kamera tidak bisa diakses: '+e.message); }
+  };
+
+  const tryScan = () => {
+    if(!videoRef.current||!canvasRef.current) return;
+    const v=videoRef.current; const c=canvasRef.current;
+    if(v.readyState!==v.HAVE_ENOUGH_DATA) return;
+    c.width=v.videoWidth; c.height=v.videoHeight;
+    const ctx=c.getContext('2d');
+    ctx.drawImage(v,0,0,c.width,c.height);
+    const imgData=ctx.getImageData(0,0,c.width,c.height);
+    // Gunakan jsQR jika tersedia
+    if(window.jsQR) {
+      const code=window.jsQR(imgData.data,imgData.width,imgData.height,{inversionAttempts:'dontInvert'});
+      if(code&&code.data) { stopCamera(); processQR(code.data); }
+    }
+  };
+
+  const processQR = (data) => {
+    const parts = data.split('|');
+    const studentCode = parts[0];
+    const studentId = parts[1];
+    const student = students.find(s=>s.studentCode===studentCode||s.id===studentId);
+    if(!student) { setError('Siswa tidak ditemukan: '+studentCode); return; }
+    processAbsen(student);
+  };
+
+  const processAbsen = async (student) => {
+    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const time = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+    const existing = records.find(r=>r.studentId===student.id&&r.date===today);
+
+    if(mode==='in' && existing?.clockIn) {
+      setResult({student, time, msg:'Sudah absen masuk jam '+existing.clockIn, type:'warn', existing});
+      return;
+    }
+    if(mode==='out' && !existing?.clockIn) {
+      setResult({student, time, msg:'Belum absen masuk hari ini!', type:'error', existing});
+      return;
+    }
+    if(mode==='out' && existing?.clockOut) {
+      setResult({student, time, msg:'Sudah absen pulang jam '+existing.clockOut, type:'warn', existing});
+      return;
+    }
+
+    // Hitung status
+    let clockInStatus=null, clockOutStatus=null;
+    if(mode==='in') {
+      const [sh,sm]=(settings.schoolStart||'07:00').split(':').map(Number);
+      const [h,m]=time.split(':').map(Number);
+      const diff=(h*60+m)-(sh*60+sm);
+      clockInStatus=diff<-15?'cepat':diff>0?'terlambat':'tepat';
+    } else {
+      const [eh,em]=(settings.schoolEnd||'15:00').split(':').map(Number);
+      const [h,m]=time.split(':').map(Number);
+      const diff=(h*60+m)-(eh*60+em);
+      clockOutStatus=diff<-15?'cepat':diff>30?'lembur':'tepat';
+    }
+
+    const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+    let rec;
+    if(mode==='in') {
+      rec=existing
+        ?Object.assign({},existing,{clockIn:time,clockInStatus,deviceId:'QR-Admin'})
+        :{id:uid(),studentId:student.id,studentName:student.name,studentCode:student.studentCode,date:today,clockIn:time,clockInStatus,clockInPhoto:null,clockInLocation:null,clockInDistance:null,deviceId:'QR-Admin'};
+    } else {
+      rec=Object.assign({},existing,{clockOut:time,clockOutStatus,deviceId:'QR-Admin'});
+    }
+
+    await DB.upsertRecord(rec);
+    await DB.addLog('Admin QR',mode==='in'?'Scan Masuk':'Scan Pulang',student.name+' - '+time);
+    await onReload();
+    setResult({student,time,type:'success',msg:(mode==='in'?'Absen Masuk':'Absen Pulang')+' berhasil!',status:mode==='in'?clockInStatus:clockOutStatus});
+  };
+
+  const handleManual = () => {
+    if(!manualCode.trim()){return;}
+    const student=students.find(s=>s.studentCode===manualCode.trim().toUpperCase()||s.studentCode===manualCode.trim());
+    if(!student){setError('Kode siswa tidak ditemukan: '+manualCode);return;}
+    setManualCode('');
+    processAbsen(student);
+  };
+
+  useEffect(()=>()=>stopCamera(),[]);
+
+  const statusColor = result?.type==='success'?'#00ff88':result?.type==='warn'?'#fbbf24':'#f87171';
+
+  return h('div',{className:'afiu',style:{display:'flex',flexDirection:'column',gap:'16px'}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
+      h('p',{style:{fontFamily:ORB,fontSize:'12px',color:'rgba(255,255,255,.6)',letterSpacing:'0.1em',textTransform:'uppercase'}},'Scan QR Absensi'),
+      // Toggle mode in/out
+      h('div',{style:{display:'flex',borderRadius:'10px',border:'1px solid rgba(255,255,255,.1)',overflow:'hidden'}},
+        ['in','out'].map(m=>h('button',{key:m,onClick:()=>{setMode(m);setResult(null);setError(null);},style:{padding:'6px 16px',background:mode===m?'rgba(0,240,255,.15)':'none',border:'none',color:mode===m?'#00f0ff':'rgba(255,255,255,.3)',fontFamily:MONO,fontSize:'11px',cursor:'pointer',fontWeight:mode===m?'bold':'normal'}},m==='in'?'Masuk':'Pulang'))
+      )
+    ),
+
+    // Hasil scan
+    result&&h('div',{style:{background:'rgba(15,15,26,.9)',border:'1px solid '+statusColor,borderRadius:'16px',padding:'20px'}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:'12px',marginBottom:'12px'}},
+        h('div',{style:{width:'48px',height:'48px',borderRadius:'50%',background:'rgba(0,240,255,.1)',border:'2px solid rgba(0,240,255,.3)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:ORB,fontSize:'20px',fontWeight:'bold',color:'#00f0ff'}},
+          result.student.name.charAt(0)
+        ),
+        h('div',null,
+          h('p',{style:{fontFamily:ORB,fontSize:'14px',fontWeight:'bold',color:'#fff'}},(result.student||{}).name),
+          h('p',{style:{fontFamily:MONO,fontSize:'10px',color:'rgba(255,255,255,.4)'}},(result.student||{}).kelas+' · '+(result.student||{}).studentCode)
+        )
+      ),
+      h('div',{style:{background:'rgba(0,0,0,.3)',borderRadius:'10px',padding:'12px',marginBottom:'12px'}},
+        h('p',{style:{color:statusColor,fontFamily:MONO,fontSize:'12px',fontWeight:'bold',marginBottom:'4px'}},result.msg),
+        result.time&&h('p',{style:{color:'rgba(255,255,255,.4)',fontFamily:MONO,fontSize:'11px'}},'Jam: '+result.time+(result.status?' · '+(result.status==='cepat'?mode==='in'?'Cepat Datang':'Cepat Pulang':result.status==='lembur'?'Lembur':result.status==='terlambat'?'Terlambat':'Tepat Waktu'):''))
+      ),
+      h('button',{onClick:()=>{setResult(null);setError(null);},style:{width:'100%',padding:'12px',borderRadius:'10px',background:'rgba(0,240,255,.1)',border:'1px solid rgba(0,240,255,.3)',color:'#00f0ff',fontFamily:MONO,fontSize:'11px',cursor:'pointer'}},'Scan Berikutnya')
+    ),
+
+    // Error
+    error&&h('div',{style:{background:'rgba(239,68,68,.1)',border:'1px solid rgba(239,68,68,.3)',borderRadius:'12px',padding:'14px'}},
+      h('p',{style:{color:'#f87171',fontFamily:MONO,fontSize:'12px'}},'⚠ '+error),
+      h('button',{onClick:()=>setError(null),style:{marginTop:'8px',background:'none',border:'none',color:'rgba(255,255,255,.3)',fontFamily:MONO,fontSize:'10px',cursor:'pointer'}},'Tutup')
+    ),
+
+    // Kamera
+    !result&&h('div',{style:{background:'rgba(15,15,26,.7)',borderRadius:'20px',overflow:'hidden',border:'1px solid rgba(0,240,255,.2)',position:'relative',aspectRatio:'1'}},
+      h('video',{ref:videoRef,style:{width:'100%',height:'100%',objectFit:'cover',display:scanning?'block':'none'},playsInline:true,muted:true}),
+      h('canvas',{ref:canvasRef,style:{display:'none'}}),
+      !scanning&&h('div',{style:{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',padding:'40px',gap:'16px'}},
+        h('div',{style:{fontSize:'64px'}},'📷'),
+        h('p',{style:{fontFamily:MONO,fontSize:'12px',color:'rgba(255,255,255,.3)',textAlign:'center'}},'Tekan tombol di bawah untuk mulai scan QR siswa')
+      ),
+      scanning&&h('div',{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}},
+        h('div',{style:{width:'200px',height:'200px',border:'2px solid #00f0ff',borderRadius:'16px',boxShadow:'0 0 0 9999px rgba(0,0,0,.5)'}})
+      )
+    ),
+
+    // Tombol kamera
+    !result&&h('button',{onClick:scanning?stopCamera:startCamera,style:{padding:'16px',borderRadius:'14px',background:scanning?'rgba(239,68,68,.15)':'linear-gradient(135deg,rgba(0,240,255,.15),rgba(168,85,247,.15))',border:'1px solid '+(scanning?'rgba(239,68,68,.4)':'rgba(0,240,255,.4)'),color:scanning?'#f87171':'#00f0ff',fontFamily:ORB,fontSize:'13px',fontWeight:'bold',letterSpacing:'0.15em',cursor:'pointer',width:'100%'}},
+      scanning?'STOP KAMERA':'MULAI SCAN QR'
+    ),
+
+    // Input manual
+    !result&&h('div',{style:{background:'rgba(15,15,26,.5)',borderRadius:'16px',padding:'16px',border:'1px solid rgba(255,255,255,.08)'}},
+      h('p',{style:{fontFamily:MONO,fontSize:'10px',color:'rgba(255,255,255,.3)',letterSpacing:'0.15em',marginBottom:'10px'}},'ATAU INPUT KODE MANUAL'),
+      h('div',{style:{display:'flex',gap:'8px'}},
+        h('input',{value:manualCode,onChange:e=>setManualCode(e.target.value),onKeyDown:e=>e.key==='Enter'&&handleManual(),placeholder:'Kode siswa (SIS001)',style:{flex:1,background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.1)',borderRadius:'10px',padding:'10px 14px',color:'#fff',fontFamily:MONO,fontSize:'13px',outline:'none'}}),
+        h('button',{onClick:handleManual,style:{padding:'10px 18px',borderRadius:'10px',background:'rgba(0,240,255,.1)',border:'1px solid rgba(0,240,255,.3)',color:'#00f0ff',fontFamily:MONO,fontSize:'12px',cursor:'pointer',fontWeight:'bold'}},'OK')
+      )
     )
   );
 }
@@ -1998,7 +2295,7 @@ function AdminPanel({onLogout}) {
 
   if(loading||!settings)return h(LoadingScreen,{msg:'Memuat data...'});
   const pending=leaves.filter(l=>l.status==='pending').length;
-  const nav=[{id:'dashboard',label:'Home',icon:'\uD83D\uDCCA'},{id:'students',label:'Siswa',icon:'\uD83C\uDF93'},{id:'attendance',label:'Absensi',icon:'\uD83D\uDCCB'},{id:'leaves',label:'Izin',icon:'\uD83D\uDCDD',badge:pending},{id:'rekap',label:'Rekap',icon:'\uD83D\uDCCA'},{id:'holidays',label:'Libur',icon:'\uD83C\uDF1F'},{id:'schedule',label:'Jadwal',icon:'\u23F0'},{id:'announcements',label:'Info',icon:'\uD83D\uDCE2'},{id:'devices',label:'Device',icon:'\uD83D\uDCF1'},{id:'location',label:'Lokasi',icon:'\uD83D\uDCCD'},{id:'multiadmin',label:'Admin',icon:'\uD83D\uDEE1'},{id:'backup',label:'Backup',icon:'\uD83D\uDCBE'},{id:'activity',label:'Log',icon:'\uD83D\uDCDC'},{id:'settings',label:'Setting',icon:'\u2699\uFE0F'}];
+  const nav=[{id:'dashboard',label:'Home',icon:'\uD83D\uDCCA'},{id:'qrscan',label:'Scan QR',icon:'\uD83D\uDCF7'},{id:'students',label:'Siswa',icon:'\uD83C\uDF93'},{id:'attendance',label:'Absensi',icon:'\uD83D\uDCCB'},{id:'leaves',label:'Izin',icon:'\uD83D\uDCDD',badge:pending},{id:'rekap',label:'Rekap',icon:'\uD83D\uDCCA'},{id:'holidays',label:'Libur',icon:'\uD83C\uDF1F'},{id:'schedule',label:'Jadwal',icon:'\u23F0'},{id:'announcements',label:'Info',icon:'\uD83D\uDCE2'},{id:'devices',label:'Device',icon:'\uD83D\uDCF1'},{id:'location',label:'Lokasi',icon:'\uD83D\uDCCD'},{id:'multiadmin',label:'Admin',icon:'\uD83D\uDEE1'},{id:'backup',label:'Backup',icon:'\uD83D\uDCBE'},{id:'activity',label:'Log',icon:'\uD83D\uDCDC'},{id:'settings',label:'Setting',icon:'\u2699\uFE0F'}];
   return h('div',{style:{minHeight:'100vh',background:'#0a0a0f',color:'#fff',position:'relative'}},
     h(ParticleBg),
     h('header',{style:Object.assign({},glS,{position:'sticky',top:0,zIndex:30,borderBottom:'1px solid rgba(0,240,255,.1)'})},
@@ -2021,6 +2318,7 @@ function AdminPanel({onLogout}) {
       page==='announcements'&&h(AdminAnnouncements,{announcements:anns,onReload:reload,students}),
       page==='devices'&&h(AdminDevices,{students,onReload:reload}),
       page==='location'&&h(AdminLocation,{settings,onSave:saveSettings}),
+      page==='qrscan'&&h(AdminQRScanner,{students,records,settings,onReload:reload}),
       page==='rekap'&&h(AdminRekapBulanan,{records,students,settings,holidays}),
       page==='holidays'&&h(AdminHolidays,{holidays,onReload:reload}),
       page==='schedule'&&h(AdminSchedule,{settings,onSave:saveSettings}),
@@ -2098,7 +2396,7 @@ function StudentPanel({student,onLogout}) {
   };
 
   if(loading||!settings)return h(LoadingScreen,{msg:'Memuat data...'});
-  const nav=[{id:'home',label:'Beranda',icon:'\uD83C\uDFE0'},{id:'history',label:'Riwayat',icon:'\uD83D\uDCDC'},{id:'calendar',label:'Kalender',icon:'\uD83D\uDCC5'},{id:'leave',label:'Izin',icon:'\uD83D\uDCDD'},{id:'profile',label:'Profil',icon:'\uD83D\uDC64'}];
+  const nav=[{id:'home',label:'Beranda',icon:'\uD83C\uDFE0'},{id:'history',label:'Riwayat',icon:'\uD83D\uDCDC'},{id:'kartu',label:'Kartu',icon:'\uD83C\uDD94'},{id:'leave',label:'Izin',icon:'\uD83D\uDCDD'},{id:'profile',label:'Profil',icon:'\uD83D\uDC64'}];
   return h('div',{style:{minHeight:'100vh',background:'#0a0a0f',color:'#fff',position:'relative'}},
     h(ParticleBg),
     toast&&h('div',{style:{position:'fixed',top:'72px',left:'50%',transform:'translateX(-50%)',zIndex:100,background:toast.type==='success'?'rgba(0,255,136,.15)':'rgba(239,68,68,.15)',border:'1px solid '+(toast.type==='success'?'rgba(0,255,136,.4)':'rgba(239,68,68,.4)'),borderRadius:'16px',padding:'14px 24px',backdropFilter:'blur(20px)',boxShadow:'0 8px 32px rgba(0,0,0,.5)',maxWidth:'340px',width:'calc(100% - 32px)',textAlign:'center'}},
@@ -2120,6 +2418,7 @@ function StudentPanel({student,onLogout}) {
       page==='home'&&h(StudentHome,{student,records,settings,school:settings,announcements:anns,leaves,onOpenCamera:a=>setCamAction(a)}),
       page==='history'&&h(StudentHistory,{student,records,settings}),
       page==='calendar'&&h(StudentCalendar,{student,records,settings,leaves}),
+      page==='kartu'&&h(StudentKartu,{student,settings}),
       page==='leave'&&h(StudentLeave,{student,leaves,onReload:reload}),
       page==='profile'&&h(StudentProfile,{student,records,settings})
     ),
